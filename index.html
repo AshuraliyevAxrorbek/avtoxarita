@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Avto | Xarita</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            overflow: hidden;
+            background: #f5f7fa;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            transition: opacity 0.6s ease, visibility 0.6s ease;
+        }
+
+        #loader.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .loader-ring {
+            width: 60px;
+            height: 60px;
+            border: 3px solid #f0f0f0;
+            border-top: 3px solid #000000;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #map {
+            width: 100%;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .glass-header {
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-radius: 20px;
+            padding: 12px 24px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+            animation: fadeDown 0.8s ease forwards;
+            opacity: 0;
+        }
+
+        .glass-header h1 {
+            font-size: 18px;
+            font-weight: 300;
+            letter-spacing: -0.5px;
+            color: #000000;
+            text-align: center;
+        }
+
+        .glass-controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            width: calc(100% - 40px);
+            max-width: 420px;
+            animation: fadeUp 0.8s ease 0.2s forwards;
+            opacity: 0;
+        }
+
+        .select-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .select-wrapper {
+            position: relative;
+            flex: 1;
+        }
+
+        .glass-select {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-radius: 18px;
+            padding: 14px 16px;
+            padding-right: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            font-size: 14px;
+            font-weight: 400;
+            color: #000000;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-select:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .glass-select option {
+            background: #ffffff;
+            color: #000000;
+            padding: 12px;
+        }
+
+        .select-arrow {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid #000000;
+            pointer-events: none;
+            transition: transform 0.3s ease;
+        }
+
+        .glass-select:focus + .select-arrow {
+            transform: translateY(-50%) rotate(180deg);
+        }
+
+        .glass-button {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-radius: 18px;
+            padding: 16px 24px;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            font-size: 15px;
+            font-weight: 500;
+            color: #ffffff;
+            cursor: pointer;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-button:hover {
+            transform: scale(1.02);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .glass-button:active {
+            transform: scale(0.98);
+        }
+
+        .glass-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        @keyframes fadeDown {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        .leaflet-popup-content-wrapper {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+        }
+
+        .leaflet-popup-tip {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        .popup-content {
+            padding: 8px;
+            font-weight: 300;
+        }
+
+        .popup-content h3 {
+            font-size: 16px;
+            font-weight: 400;
+            margin-bottom: 8px;
+            color: #000000;
+        }
+
+        .popup-content p {
+            font-size: 13px;
+            color: #666666;
+            margin: 4px 0;
+        }
+
+        .leaflet-routing-container {
+            display: none !important;
+        }
+
+        .leaflet-marker-icon {
+            animation: markerDrop 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        @keyframes markerDrop {
+            0% {
+                transform: translateY(-100px);
+                opacity: 0;
+            }
+            60% {
+                transform: translateY(10px);
+                opacity: 1;
+            }
+            80% {
+                transform: translateY(-5px);
+            }
+            100% {
+                transform: translateY(0);
+            }
+        }
+
+        .leaflet-container {
+            background: #f5f7fa;
+        }
+
+        @media (max-width: 480px) {
+            .glass-header h1 {
+                font-size: 16px;
+            }
+
+            .glass-select {
+                font-size: 13px;
+                padding: 12px 14px;
+                padding-right: 36px;
+            }
+
+            .glass-button {
+                font-size: 14px;
+                padding: 14px 20px;
+            }
+
+            .glass-controls {
+                width: calc(100% - 32px);
+                bottom: 16px;
+            }
+
+            .select-row {
+                gap: 10px;
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="loader">
+        <div class="loader-ring"></div>
+    </div>
+
+    <div class="glass-header">
+        <h1>Avto | Xarita</h1>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="glass-controls">
+        <div class="select-row">
+            <div class="select-wrapper">
+                <select class="glass-select" id="fromSelect">
+                    <option value="">Qayerdan</option>
+                    <option value="toshkent">Toshkent</option>
+                    <option value="samarqand">Samarqand</option>
+                    <option value="buxoro">Buxoro</option>
+                    <option value="andijon">Andijon</option>
+                    <option value="namangan">Namangan</option>
+                    <option value="qoqon">Qo'qon</option>
+                    <option value="urganch">Urganch</option>
+                    <option value="nukus">Nukus</option>
+                    <option value="termiz">Termiz</option>
+                    <option value="qarshi">Qarshi</option>
+                    <option value="navoiy">Navoiy</option>
+                    <option value="jizzax">Jizzax</option>
+                </select>
+                <div class="select-arrow"></div>
+            </div>
+            <div class="select-wrapper">
+                <select class="glass-select" id="toSelect">
+                    <option value="">Qayerga</option>
+                    <option value="toshkent">Toshkent</option>
+                    <option value="samarqand">Samarqand</option>
+                    <option value="buxoro">Buxoro</option>
+                    <option value="andijon">Andijon</option>
+                    <option value="namangan">Namangan</option>
+                    <option value="qoqon">Qo'qon</option>
+                    <option value="urganch">Urganch</option>
+                    <option value="nukus">Nukus</option>
+                    <option value="termiz">Termiz</option>
+                    <option value="qarshi">Qarshi</option>
+                    <option value="navoiy">Navoiy</option>
+                    <option value="jizzax">Jizzax</option>
+                </select>
+                <div class="select-arrow"></div>
+            </div>
+        </div>
+        <button class="glass-button" id="findRouteBtn" disabled>Marshrutni ko'rsatish</button>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <script>
+        const cities = {
+            toshkent: { coords: [41.2995, 69.2401], name: "Toshkent" },
+            samarqand: { coords: [39.6270, 66.9750], name: "Samarqand" },
+            buxoro: { coords: [39.7750, 64.4286], name: "Buxoro" },
+            andijon: { coords: [40.7821, 72.3442], name: "Andijon" },
+            namangan: { coords: [40.9983, 71.6726], name: "Namangan" },
+            qoqon: { coords: [40.5286, 70.9424], name: "Qo'qon" },
+            urganch: { coords: [41.5533, 60.6311], name: "Urganch" },
+            nukus: { coords: [42.4650, 59.6103], name: "Nukus" },
+            termiz: { coords: [37.2244, 67.2783], name: "Termiz" },
+            qarshi: { coords: [38.8606, 65.7897], name: "Qarshi" },
+            navoiy: { coords: [40.0844, 65.3792], name: "Navoiy" },
+            jizzax: { coords: [40.1158, 67.8422], name: "Jizzax" }
+        };
+
+        let map;
+        let currentRouting = null;
+        let currentMarkers = [];
+        let animatedPolyline = null;
+
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('loader').classList.add('hidden');
+            }, 1000);
+
+            map = L.map('map', {
+                zoomControl: true
+            }).setView([41.3775, 64.5853], 6);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '',
+                maxZoom: 19
+            }).addTo(map);
+
+            L.control.zoom({
+                position: 'topright'
+            }).addTo(map);
+
+            const fromSelect = document.getElementById('fromSelect');
+            const toSelect = document.getElementById('toSelect');
+            const findBtn = document.getElementById('findRouteBtn');
+
+            function checkSelections() {
+                if (fromSelect.value && toSelect.value && fromSelect.value !== toSelect.value) {
+                    findBtn.disabled = false;
+                } else {
+                    findBtn.disabled = true;
+                }
+            }
+
+            fromSelect.addEventListener('change', checkSelections);
+            toSelect.addEventListener('change', checkSelections);
+
+            findBtn.addEventListener('click', () => {
+                const from = fromSelect.value;
+                const to = toSelect.value;
+                if (from && to && from !== to) {
+                    showRoute(from, to);
+                }
+            });
+        });
+
+        function clearRoute() {
+            if (currentRouting) {
+                map.removeControl(currentRouting);
+                currentRouting = null;
+            }
+            if (animatedPolyline) {
+                map.removeLayer(animatedPolyline);
+                animatedPolyline = null;
+            }
+            currentMarkers.forEach(marker => map.removeLayer(marker));
+            currentMarkers = [];
+        }
+
+        function showRoute(fromCity, toCity) {
+            clearRoute();
+
+            const startCity = cities[fromCity];
+            const endCity = cities[toCity];
+            const startCoords = startCity.coords;
+            const endCoords = endCity.coords;
+
+            const bounds = L.latLngBounds([startCoords, endCoords]);
+            map.fitBounds(bounds, { 
+                padding: [100, 100], 
+                duration: 1,
+                maxZoom: 12
+            });
+
+            currentRouting = L.Routing.control({
+                waypoints: [
+                    L.latLng(startCoords[0], startCoords[1]),
+                    L.latLng(endCoords[0], endCoords[1])
+                ],
+                routeWhileDragging: false,
+                addWaypoints: false,
+                draggableWaypoints: false,
+                fitSelectedRoutes: false,
+                showAlternatives: false,
+                lineOptions: {
+                    styles: [{
+                        color: 'transparent',
+                        opacity: 0,
+                        weight: 0
+                    }]
+                },
+                createMarker: function() { return null; }
+            }).addTo(map);
+
+            currentRouting.on('routesfound', function(e) {
+                const routes = e.routes;
+                const route = routes[0];
+                const coordinates = route.coordinates;
+                const distanceKm = (route.summary.totalDistance / 1000).toFixed(1);
+                const distanceMiles = (distanceKm * 0.621371).toFixed(1);
+
+                setTimeout(() => {
+                    animateRoute(coordinates, startCoords, endCoords, startCity.name, endCity.name, distanceKm, distanceMiles);
+                }, 800);
+            });
+        }
+
+        function animateRoute(coordinates, startCoords, endCoords, startName, endName, distanceKm, distanceMiles) {
+            const totalPoints = coordinates.length;
+            const duration = Math.min(5000, Math.max(2000, totalPoints * 15));
+            const steps = 100;
+            const stepDuration = duration / steps;
+            
+            let currentStep = 0;
+            const pointsPerStep = Math.ceil(totalPoints / steps);
+
+            animatedPolyline = L.polyline([], {
+                color: '#000000',
+                weight: 4,
+                opacity: 0.8,
+                smoothFactor: 2
+            }).addTo(map);
+
+            const animationInterval = setInterval(() => {
+                currentStep++;
+                const pointsToShow = Math.min(currentStep * pointsPerStep, totalPoints);
+                const visibleCoords = coordinates.slice(0, pointsToShow);
+                animatedPolyline.setLatLngs(visibleCoords);
+
+                if (currentStep >= steps || pointsToShow >= totalPoints) {
+                    clearInterval(animationInterval);
+                    
+                    setTimeout(() => {
+                        const startMarker = L.marker(startCoords, {
+                            icon: L.divIcon({
+                                className: 'custom-marker',
+                                html: '<div style="width: 14px; height: 14px; background: #00AA00; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 3px 10px rgba(0,170,0,0.5);"></div>',
+                                iconSize: [14, 14],
+                                iconAnchor: [7, 7]
+                            })
+                        }).addTo(map);
+
+                        const endMarker = L.marker(endCoords, {
+                            icon: L.divIcon({
+                                className: 'custom-marker',
+                                html: '<div style="width: 14px; height: 14px; background: #DD0000; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 3px 10px rgba(221,0,0,0.5);"></div>',
+                                iconSize: [14, 14],
+                                iconAnchor: [7, 7]
+                            })
+                        }).addTo(map);
+
+                        const popupContent = `
+                            <div class="popup-content">
+                                <h3>${startName} → ${endName}</h3>
+                                <p>Masofa: ${distanceKm} km / ${distanceMiles} mil</p>
+                            </div>
+                        `;
+                        
+                        endMarker.bindPopup(popupContent, {
+                            closeButton: false,
+                            offset: [0, -8]
+                        });
+                        
+                        setTimeout(() => {
+                            endMarker.openPopup();
+                        }, 400);
+
+                        currentMarkers.push(startMarker, endMarker);
+                    }, 300);
+                }
+            }, stepDuration);
+        }
+    </script>
+</body>
+</html>
