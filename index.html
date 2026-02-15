@@ -250,6 +250,25 @@
             margin: 4px 0;
         }
 
+        .waypoint-marker {
+            animation: waypointPulse 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        @keyframes waypointPulse {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.2);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
         .leaflet-routing-container {
             display: none !important;
         }
@@ -279,6 +298,31 @@
             background: #f5f7fa;
         }
 
+        .route-info-panel {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 999;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-radius: 18px;
+            padding: 14px 20px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            font-size: 13px;
+            color: #000000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+            max-width: 90%;
+        }
+
+        .route-info-panel.active {
+            opacity: 1;
+        }
+
         @media (max-width: 480px) {
             .glass-header h1 {
                 font-size: 16px;
@@ -304,6 +348,11 @@
                 gap: 10px;
                 margin-bottom: 10px;
             }
+
+            .route-info-panel {
+                font-size: 12px;
+                padding: 12px 16px;
+            }
         }
     </style>
 </head>
@@ -318,11 +367,14 @@
 
     <div id="map"></div>
 
+    <div class="route-info-panel" id="routeInfo"></div>
+
     <div class="glass-controls">
         <div class="select-row">
             <div class="select-wrapper">
                 <select class="glass-select" id="fromSelect">
                     <option value="">Qayerdan</option>
+                    <option value="mylocation">📍 Joylashuvimdan</option>
                     <option value="toshkent">Toshkent</option>
                     <option value="samarqand">Samarqand</option>
                     <option value="buxoro">Buxoro</option>
@@ -364,24 +416,119 @@
     <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
     <script>
         const cities = {
-            toshkent: { coords: [41.2995, 69.2401], name: "Toshkent" },
-            samarqand: { coords: [39.6270, 66.9750], name: "Samarqand" },
-            buxoro: { coords: [39.7750, 64.4286], name: "Buxoro" },
-            andijon: { coords: [40.7821, 72.3442], name: "Andijon" },
-            namangan: { coords: [40.9983, 71.6726], name: "Namangan" },
-            qoqon: { coords: [40.5286, 70.9424], name: "Qo'qon" },
-            urganch: { coords: [41.5533, 60.6311], name: "Urganch" },
-            nukus: { coords: [42.4650, 59.6103], name: "Nukus" },
-            termiz: { coords: [37.2244, 67.2783], name: "Termiz" },
-            qarshi: { coords: [38.8606, 65.7897], name: "Qarshi" },
-            navoiy: { coords: [40.0844, 65.3792], name: "Navoiy" },
-            jizzax: { coords: [40.1158, 67.8422], name: "Jizzax" }
+            toshkent: { coords: [41.2995, 69.2401], name: "Toshkent", region: "Toshkent shahri" },
+            samarqand: { coords: [39.6270, 66.9750], name: "Samarqand", region: "Samarqand viloyati" },
+            buxoro: { coords: [39.7750, 64.4286], name: "Buxoro", region: "Buxoro viloyati" },
+            andijon: { coords: [40.7821, 72.3442], name: "Andijon", region: "Andijon viloyati" },
+            namangan: { coords: [40.9983, 71.6726], name: "Namangan", region: "Namangan viloyati" },
+            qoqon: { coords: [40.5286, 70.9424], name: "Qo'qon", region: "Farg'ona viloyati" },
+            urganch: { coords: [41.5533, 60.6311], name: "Urganch", region: "Xorazm viloyati" },
+            nukus: { coords: [42.4650, 59.6103], name: "Nukus", region: "Qoraqalpog'iston Respublikasi" },
+            termiz: { coords: [37.2244, 67.2783], name: "Termiz", region: "Surxondaryo viloyati" },
+            qarshi: { coords: [38.8606, 65.7897], name: "Qarshi", region: "Qashqadaryo viloyati" },
+            navoiy: { coords: [40.0844, 65.3792], name: "Navoiy", region: "Navoiy viloyati" },
+            jizzax: { coords: [40.1158, 67.8422], name: "Jizzax", region: "Jizzax viloyati" }
+        };
+
+        const detailedWaypoints = {
+            'andijon-qoqon': [
+                { coords: [40.7500, 72.2000], name: 'Asaka' },
+                { coords: [40.6800, 71.7200], name: 'Sharxon' },
+                { coords: [40.6000, 71.3500], name: 'Rishton' }
+            ],
+            'qoqon-andijon': [
+                { coords: [40.6000, 71.3500], name: 'Rishton' },
+                { coords: [40.6800, 71.7200], name: 'Sharxon' },
+                { coords: [40.7500, 72.2000], name: 'Asaka' }
+            ],
+            'toshkent-samarqand': [
+                { coords: [40.1158, 67.8422], name: 'Jizzax' },
+                { coords: [39.9000, 67.3000], name: 'Forish' }
+            ],
+            'samarqand-toshkent': [
+                { coords: [39.9000, 67.3000], name: 'Forish' },
+                { coords: [40.1158, 67.8422], name: 'Jizzax' }
+            ],
+            'toshkent-buxoro': [
+                { coords: [40.1158, 67.8422], name: 'Jizzax' },
+                { coords: [40.0844, 65.3792], name: 'Navoiy' },
+                { coords: [40.0200, 64.8500], name: 'Karmana' }
+            ],
+            'buxoro-toshkent': [
+                { coords: [40.0200, 64.8500], name: 'Karmana' },
+                { coords: [40.0844, 65.3792], name: 'Navoiy' },
+                { coords: [40.1158, 67.8422], name: 'Jizzax' }
+            ],
+            'toshkent-andijon': [
+                { coords: [41.2000, 69.8000], name: 'Ohangaron' },
+                { coords: [40.5286, 70.9424], name: 'Qo\'qon' },
+                { coords: [40.6000, 71.3500], name: 'Rishton' },
+                { coords: [40.7500, 72.2000], name: 'Asaka' }
+            ],
+            'andijon-toshkent': [
+                { coords: [40.7500, 72.2000], name: 'Asaka' },
+                { coords: [40.6000, 71.3500], name: 'Rishton' },
+                { coords: [40.5286, 70.9424], name: 'Qo\'qon' },
+                { coords: [41.2000, 69.8000], name: 'Ohangaron' }
+            ],
+            'toshkent-namangan': [
+                { coords: [41.2000, 69.8000], name: 'Ohangaron' },
+                { coords: [40.5286, 70.9424], name: 'Qo\'qon' },
+                { coords: [40.7000, 71.2500], name: 'Quva' }
+            ],
+            'namangan-toshkent': [
+                { coords: [40.7000, 71.2500], name: 'Quva' },
+                { coords: [40.5286, 70.9424], name: 'Qo\'qon' },
+                { coords: [41.2000, 69.8000], name: 'Ohangaron' }
+            ],
+            'toshkent-termiz': [
+                { coords: [40.1158, 67.8422], name: 'Jizzax' },
+                { coords: [39.6270, 66.9750], name: 'Samarqand' },
+                { coords: [38.8606, 65.7897], name: 'Qarshi' },
+                { coords: [38.0000, 66.5000], name: 'Sherobod' }
+            ],
+            'termiz-toshkent': [
+                { coords: [38.0000, 66.5000], name: 'Sherobod' },
+                { coords: [38.8606, 65.7897], name: 'Qarshi' },
+                { coords: [39.6270, 66.9750], name: 'Samarqand' },
+                { coords: [40.1158, 67.8422], name: 'Jizzax' }
+            ],
+            'samarqand-buxoro': [
+                { coords: [40.0844, 65.3792], name: 'Navoiy' },
+                { coords: [40.0200, 64.8500], name: 'Karmana' }
+            ],
+            'buxoro-samarqand': [
+                { coords: [40.0200, 64.8500], name: 'Karmana' },
+                { coords: [40.0844, 65.3792], name: 'Navoiy' }
+            ],
+            'buxoro-urganch': [
+                { coords: [40.5000, 63.5000], name: 'Olot' },
+                { coords: [41.2000, 61.8000], name: 'Xiva' }
+            ],
+            'urganch-buxoro': [
+                { coords: [41.2000, 61.8000], name: 'Xiva' },
+                { coords: [40.5000, 63.5000], name: 'Olot' }
+            ],
+            'toshkent-urganch': [
+                { coords: [40.1158, 67.8422], name: 'Jizzax' },
+                { coords: [40.0844, 65.3792], name: 'Navoiy' },
+                { coords: [39.7750, 64.4286], name: 'Buxoro' },
+                { coords: [41.2000, 61.8000], name: 'Xiva' }
+            ],
+            'urganch-toshkent': [
+                { coords: [41.2000, 61.8000], name: 'Xiva' },
+                { coords: [39.7750, 64.4286], name: 'Buxoro' },
+                { coords: [40.0844, 65.3792], name: 'Navoiy' },
+                { coords: [40.1158, 67.8422], name: 'Jizzax' }
+            ]
         };
 
         let map;
         let currentRouting = null;
         let currentMarkers = [];
+        let waypointMarkers = [];
         let animatedPolyline = null;
+        let userLocation = null;
 
         window.addEventListener('load', () => {
             setTimeout(() => {
@@ -405,16 +552,25 @@
             const toSelect = document.getElementById('toSelect');
             const findBtn = document.getElementById('findRouteBtn');
 
+            fromSelect.addEventListener('change', function() {
+                if (this.value === 'mylocation') {
+                    requestUserLocation();
+                }
+                checkSelections();
+            });
+
+            toSelect.addEventListener('change', checkSelections);
+
             function checkSelections() {
-                if (fromSelect.value && toSelect.value && fromSelect.value !== toSelect.value) {
+                const fromValue = fromSelect.value;
+                const toValue = toSelect.value;
+                
+                if (fromValue && toValue && fromValue !== toValue) {
                     findBtn.disabled = false;
                 } else {
                     findBtn.disabled = true;
                 }
             }
-
-            fromSelect.addEventListener('change', checkSelections);
-            toSelect.addEventListener('change', checkSelections);
 
             findBtn.addEventListener('click', () => {
                 const from = fromSelect.value;
@@ -424,6 +580,52 @@
                 }
             });
         });
+
+        function requestUserLocation() {
+            const routeInfoPanel = document.getElementById('routeInfo');
+            routeInfoPanel.textContent = 'Joylashuvingizni aniqlanmoqda...';
+            routeInfoPanel.classList.add('active');
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        userLocation = {
+                            coords: [position.coords.latitude, position.coords.longitude],
+                            name: "Joylashuvim"
+                        };
+                        map.setView(userLocation.coords, 13);
+                        
+                        const locationMarker = L.marker(userLocation.coords, {
+                            icon: L.divIcon({
+                                className: 'custom-marker',
+                                html: '<div style="width: 16px; height: 16px; background: #0066FF; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 0 0 8px rgba(0,102,255,0.2), 0 4px 12px rgba(0,102,255,0.6);"></div>',
+                                iconSize: [16, 16],
+                                iconAnchor: [8, 8]
+                            })
+                        }).addTo(map);
+                        currentMarkers.push(locationMarker);
+
+                        routeInfoPanel.textContent = 'Joylashuvingiz aniqlandi!';
+                        setTimeout(() => {
+                            routeInfoPanel.classList.remove('active');
+                        }, 2000);
+                    },
+                    function(error) {
+                        routeInfoPanel.textContent = 'Joylashuvni aniqlab bo\'lmadi. Qayta urinib ko\'ring.';
+                        setTimeout(() => {
+                            routeInfoPanel.classList.remove('active');
+                        }, 3000);
+                        document.getElementById('fromSelect').value = '';
+                    }
+                );
+            } else {
+                routeInfoPanel.textContent = 'Brauzeringiz joylashuvni qo\'llab-quvvatlamaydi';
+                setTimeout(() => {
+                    routeInfoPanel.classList.remove('active');
+                }, 3000);
+                document.getElementById('fromSelect').value = '';
+            }
+        }
 
         function clearRoute() {
             if (currentRouting) {
@@ -436,60 +638,78 @@
             }
             currentMarkers.forEach(marker => map.removeLayer(marker));
             currentMarkers = [];
+            waypointMarkers.forEach(marker => map.removeLayer(marker));
+            waypointMarkers = [];
+            document.getElementById('routeInfo').classList.remove('active');
         }
 
         function showRoute(fromCity, toCity) {
             clearRoute();
 
-            const startCity = cities[fromCity];
+            let startCity, startCoords;
+            
+            if (fromCity === 'mylocation' && userLocation) {
+                startCity = userLocation;
+                startCoords = userLocation.coords;
+            } else {
+                startCity = cities[fromCity];
+                startCoords = startCity.coords;
+            }
+
             const endCity = cities[toCity];
-            const startCoords = startCity.coords;
             const endCoords = endCity.coords;
 
-            const bounds = L.latLngBounds([startCoords, endCoords]);
-            map.fitBounds(bounds, { 
-                padding: [100, 100], 
-                duration: 1,
-                maxZoom: 12
+            const routeKey = `${fromCity}-${toCity}`;
+            const reverseRouteKey = `${toCity}-${fromCity}`;
+            const waypoints = detailedWaypoints[routeKey] || detailedWaypoints[reverseRouteKey] || [];
+
+            map.setView(startCoords, 10, {
+                animate: true,
+                duration: 1.2
             });
 
-            currentRouting = L.Routing.control({
-                waypoints: [
+            setTimeout(() => {
+                const allWaypoints = [
                     L.latLng(startCoords[0], startCoords[1]),
+                    ...waypoints.map(wp => L.latLng(wp.coords[0], wp.coords[1])),
                     L.latLng(endCoords[0], endCoords[1])
-                ],
-                routeWhileDragging: false,
-                addWaypoints: false,
-                draggableWaypoints: false,
-                fitSelectedRoutes: false,
-                showAlternatives: false,
-                lineOptions: {
-                    styles: [{
-                        color: 'transparent',
-                        opacity: 0,
-                        weight: 0
-                    }]
-                },
-                createMarker: function() { return null; }
-            }).addTo(map);
+                ];
 
-            currentRouting.on('routesfound', function(e) {
-                const routes = e.routes;
-                const route = routes[0];
-                const coordinates = route.coordinates;
-                const distanceKm = (route.summary.totalDistance / 1000).toFixed(1);
-                const distanceMiles = (distanceKm * 0.621371).toFixed(1);
+                currentRouting = L.Routing.control({
+                    waypoints: allWaypoints,
+                    routeWhileDragging: false,
+                    addWaypoints: false,
+                    draggableWaypoints: false,
+                    fitSelectedRoutes: false,
+                    showAlternatives: false,
+                    lineOptions: {
+                        styles: [{
+                            color: 'transparent',
+                            opacity: 0,
+                            weight: 0
+                        }]
+                    },
+                    createMarker: function() { return null; }
+                }).addTo(map);
 
-                setTimeout(() => {
-                    animateRoute(coordinates, startCoords, endCoords, startCity.name, endCity.name, distanceKm, distanceMiles);
-                }, 800);
-            });
+                currentRouting.on('routesfound', function(e) {
+                    const routes = e.routes;
+                    const route = routes[0];
+                    const coordinates = route.coordinates;
+                    const distanceKm = (route.summary.totalDistance / 1000).toFixed(1);
+                    const distanceMiles = (distanceKm * 0.621371).toFixed(1);
+
+                    setTimeout(() => {
+                        animateRoute(coordinates, startCoords, endCoords, startCity, endCity, distanceKm, distanceMiles, waypoints);
+                    }, 800);
+                });
+            }, 1200);
         }
 
-        function animateRoute(coordinates, startCoords, endCoords, startName, endName, distanceKm, distanceMiles) {
+        function animateRoute(coordinates, startCoords, endCoords, startCity, endCity, distanceKm, distanceMiles, waypoints) {
             const totalPoints = coordinates.length;
-            const duration = Math.min(5000, Math.max(2000, totalPoints * 15));
-            const steps = 100;
+            const duration = Math.min(5000, Math.max(2500, totalPoints * 18));
+            const steps = 120;
             const stepDuration = duration / steps;
             
             let currentStep = 0;
@@ -502,52 +722,109 @@
                 smoothFactor: 2
             }).addTo(map);
 
+            const routeInfoPanel = document.getElementById('routeInfo');
+            routeInfoPanel.textContent = `${startCity.name} → ${endCity.name}`;
+            routeInfoPanel.classList.add('active');
+
+            const waypointDistances = waypoints.map(wp => {
+                let minDist = Infinity;
+                let closestIndex = 0;
+                coordinates.forEach((coord, idx) => {
+                    const dist = Math.sqrt(
+                        Math.pow(coord.lat - wp.coords[0], 2) + 
+                        Math.pow(coord.lng - wp.coords[1], 2)
+                    );
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestIndex = idx;
+                    }
+                });
+                return { name: wp.name, index: closestIndex, coords: wp.coords };
+            });
+
             const animationInterval = setInterval(() => {
                 currentStep++;
                 const pointsToShow = Math.min(currentStep * pointsPerStep, totalPoints);
                 const visibleCoords = coordinates.slice(0, pointsToShow);
                 animatedPolyline.setLatLngs(visibleCoords);
 
+                waypointDistances.forEach(wp => {
+                    if (pointsToShow >= wp.index && !waypointMarkers.find(m => m.wpName === wp.name)) {
+                        const wpMarker = L.marker(wp.coords, {
+                            icon: L.divIcon({
+                                className: 'waypoint-marker',
+                                html: `<div style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 6px 12px; border-radius: 12px; border: 1px solid rgba(0, 0, 0, 0.1); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); font-size: 12px; font-weight: 500; color: #000; white-space: nowrap;">📍 ${wp.name}</div>`,
+                                iconSize: [100, 30],
+                                iconAnchor: [50, 15]
+                            })
+                        }).addTo(map);
+                        wpMarker.wpName = wp.name;
+                        waypointMarkers.push(wpMarker);
+
+                        routeInfoPanel.textContent = `${wp.name} orqali o'tmoqda...`;
+                    }
+                });
+
+                const currentPoint = visibleCoords[visibleCoords.length - 1];
+                if (currentPoint) {
+                    map.panTo([currentPoint.lat, currentPoint.lng], {
+                        animate: true,
+                        duration: stepDuration / 1000,
+                        easeLinearity: 0.1
+                    });
+                }
+
                 if (currentStep >= steps || pointsToShow >= totalPoints) {
                     clearInterval(animationInterval);
                     
                     setTimeout(() => {
-                        const startMarker = L.marker(startCoords, {
-                            icon: L.divIcon({
-                                className: 'custom-marker',
-                                html: '<div style="width: 14px; height: 14px; background: #00AA00; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 3px 10px rgba(0,170,0,0.5);"></div>',
-                                iconSize: [14, 14],
-                                iconAnchor: [7, 7]
-                            })
-                        }).addTo(map);
-
-                        const endMarker = L.marker(endCoords, {
-                            icon: L.divIcon({
-                                className: 'custom-marker',
-                                html: '<div style="width: 14px; height: 14px; background: #DD0000; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 3px 10px rgba(221,0,0,0.5);"></div>',
-                                iconSize: [14, 14],
-                                iconAnchor: [7, 7]
-                            })
-                        }).addTo(map);
-
-                        const popupContent = `
-                            <div class="popup-content">
-                                <h3>${startName} → ${endName}</h3>
-                                <p>Masofa: ${distanceKm} km / ${distanceMiles} mil</p>
-                            </div>
-                        `;
-                        
-                        endMarker.bindPopup(popupContent, {
-                            closeButton: false,
-                            offset: [0, -8]
+                        const bounds = L.latLngBounds([startCoords, endCoords, ...waypoints.map(w => w.coords)]);
+                        map.fitBounds(bounds, { 
+                            padding: [80, 80], 
+                            duration: 1.5,
+                            maxZoom: 10
                         });
-                        
-                        setTimeout(() => {
-                            endMarker.openPopup();
-                        }, 400);
 
-                        currentMarkers.push(startMarker, endMarker);
-                    }, 300);
+                        setTimeout(() => {
+                            const startMarker = L.marker(startCoords, {
+                                icon: L.divIcon({
+                                    className: 'custom-marker',
+                                    html: '<div style="width: 16px; height: 16px; background: #00AA00; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 4px 12px rgba(0,170,0,0.6);"></div>',
+                                    iconSize: [16, 16],
+                                    iconAnchor: [8, 8]
+                                })
+                            }).addTo(map);
+
+                            const endMarker = L.marker(endCoords, {
+                                icon: L.divIcon({
+                                    className: 'custom-marker',
+                                    html: '<div style="width: 16px; height: 16px; background: #DD0000; border: 3px solid #ffffff; border-radius: 50%; box-shadow: 0 4px 12px rgba(221,0,0,0.6);"></div>',
+                                    iconSize: [16, 16],
+                                    iconAnchor: [8, 8]
+                                })
+                            }).addTo(map);
+
+                            const popupContent = `
+                                <div class="popup-content">
+                                    <h3>${startCity.name} → ${endCity.name}</h3>
+                                    <p>Masofa: ${distanceKm} km / ${distanceMiles} mil</p>
+                                    ${waypoints.length > 0 ? `<p style="font-size: 12px; margin-top: 6px; color: #888;">Orqali: ${waypoints.map(w => w.name).join(', ')}</p>` : ''}
+                                </div>
+                            `;
+                            
+                            endMarker.bindPopup(popupContent, {
+                                closeButton: false,
+                                offset: [0, -10]
+                            });
+                            
+                            setTimeout(() => {
+                                endMarker.openPopup();
+                                routeInfoPanel.textContent = `${startCity.name} → ${endCity.name} (${distanceKm} km)`;
+                            }, 600);
+
+                            currentMarkers.push(startMarker, endMarker);
+                        }, 800);
+                    }, 400);
                 }
             }, stepDuration);
         }
